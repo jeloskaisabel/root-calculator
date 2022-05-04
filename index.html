@@ -1,0 +1,334 @@
+<!DOCTYPE HTML>
+<html>
+  <title>Descartes' Rule of Signs</title>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width">
+    <title>SageMathCell</title>
+    <script src="https://sagecell.sagemath.org/static/embedded_sagecell.js"></script>
+    <script>$(function () {
+    sagecell.makeSagecell({inputLocation:  '#mycell',
+                           template:       sagecell.templates.minimal,
+                           autoeval:       true,
+                           linked:         true,
+                           hide:           ["evalButton"],
+                           //evalButtonText: 'Recompute'
+                          });
+    }); 
+    </script>
+  </head>
+
+<body>
+<h1>Regla de signos de Descartes y Formula de lagrange para acotar raices</h1>
+
+<p>
+    La regla de los signos de Descartes da un límite superior al número de raices reales positivas y negativas de un polinomio real. Estos límites en el número de raices contadas con multiplicidad.</p>
+<p>
+    El algoritmo de Descartes es simple. Escribe un polinomio con sus términos en orden de grado ascendente (o descendente). A continuación, se enumeran los coeficientes ignorando los ceros y se cuentan la cantidad de veces que la lista de números cambia de positivo a negativo o viceversa.
+    Descartes descubrió que el número de cambios de signo en la lista de coeficientes da un límite superior al número de raices reales <i>positivas</i> del polinomio. De hecho, si hay $s$ cambios de signo, entonces el polinomio tiene $s-2k$ raices reales positivas para algún entero positivo k.
+</p>
+<p>
+    Por ejemplo, si $s=3$, tentonces hay 3 o 1 raices reales positivas. Por otro lado si $s=4$, entonces hay 4, 2 o ninguna raíz real positiva.</p>
+</p>
+<p>
+    Si $r$ es una raíz real negativa de $f(x)$, entonces $-r$ es una raíz real positiva de $f(-x)$. Por lo tanto, la regla de los signos de Descartes también se puede utilizar para dar un límite superior al número de raices reales negativas. Simplemente aplicamos esta misma técnica a $f(-x)$.
+</p>
+
+<div id="mycell"><script type="text/x-sage">
+    #
+    # cleanInput toma una cadena y devuelve una cadena limpia, con suerte, más adecuada
+    # para ser convertido a un polinomio en x.
+    #
+    # Si la cadena de entrada contiene caracteres no válidos, cleanInput devuelve "entrada incorrecta".
+    # De lo contrario, devolvimos una versión limpia de la cadena de entrada.
+    #
+def cleanInput(inputString):
+     input_string = str(inputString)
+
+     # debemos asegurarnos de que todas las letras estén en minúsculas, luego eliminamos todos los espacios en blanco, cambiamos de corchetes a paréntesis.
+     input_string = input_string.lower()
+     input_string = ''.join(input_string.split())
+     input_string = input_string.replace("{", "(")
+     input_string = input_string.replace("[", "(")
+     input_string = input_string.replace("}", ")")
+     input_string = input_string.replace("]", ")")
+
+     # Nuestra entrada solo debe incluir: dígitos, x, puntos, paréntesis y operaciones +-/*^
+     # Si no, devuelve "entrada incorrecta", lo que hará que el analizador polinomial de Sage lo rechace.
+     if input_string.strip("1234567890^-+x/.*()"):
+          return "Entrada Inválida"
+
+     i=0   # comienza al principio de la cadena
+     N=len(input_string)  # longitud de la cadena
+     lc = "*"  # lc es el 'último carácter' establecido inicialmente en "*" ya que "*" siempre está bien como carácter anterior
+
+     # Si nuestra entrada tiene al menos 2 caracteres, nc (el 'siguiente carácter') se establece en el segundo carácter de la entrada.
+     # Si nuestra entrada no tiene al menos 2 caracteres, establezca nc en "*" ya que eso siempre está bien.
+     if N>1:
+         nc = str(input_string[1])
+     else:
+         nc = "*"
+    
+    # Explorar a través de la cadena de entrada. i<N significa que no estamos al final
+     while i<N:
+        c = str(input_string[i])  # c is the current character
+
+        # si nuestro carácter actual es x y no estamos siguiendo un *,+,-, o (deberíamos agregar un * justo antes de x.
+        if c=="x" and lc.strip('*+-('): 
+            input_string = input_string[:i] + "*" + input_string[i:]
+
+        # si nuestro carácter actual es ( y no estamos siguiendo un *,+,-,/ o ^, debemos agregar un * justo antes de (.
+        if c=="(" and lc.strip('*+-/^'):
+            input_string = input_string[:i] + "*" + input_string[i:]
+
+        # si nuestro carácter actual es x y no nos sigue un *,+,-,/ o ^, debemos agregar un * justo después de x.
+        # i<N-1 se asegura de que no estemos al final de la cadena de entrada
+        if c=="x" and i<N-1 and nc.strip('*+-/^'):
+            input_string = input_string[:i+1] + "*" + input_string[i+1:]
+
+        # si nuestro carácter actual es ) y no nos sigue un *,+,-,/ o ^, debemos agregar un * justo después).
+        # i<N-1 se asegura de que no estemos al final de la cadena de entrada
+        if c==")" and i<N-1 and nc.strip('*+-/^'):
+            input_string = input_string[:i+1] + "*" + input_string[i+1:]
+
+        N = len(input_string)  # actualizar la longitud de la cadena (en caso de que insertemos *)
+        i=i+1  # move on to the next character
+
+        lc = input_string[i-1]  # Obtener el nuevo caracter anterior
+
+        # si no hemos llegado al final de la cadena, actualice el siguiente carácter
+        # de lo contrario, use "*" ya que siempre está bien.
+        if i<N-1:  
+            nc = str(input_string[i+1])
+        else:
+            nc = "*"     
+
+     # devuelve el input formateado...
+     return input_string
+
+# Dado un polinomio f(x), esta función imprime el patrón de signos de sus coeficientes.
+# También calcula el número de cambios de signo del coeficiente.
+#
+# Nota: Los recuentos de cambios de signo ignoran los 0, por lo que + + 0 + - 0 + solo cambia de signo dos veces. 
+def coeffSignChange(f):
+    # Toma los coeficientes de un polinomio f. "sparse=False" le dice a Sage que lo deje en ceros.
+    fcoeffs = f.coefficients(sparse=False)
+    
+    # Los coeficientes se devuelven de menor a mayor orden. Al invertir la lista,
+    # garantizamos comenzar con un coeficiente distinto de cero.
+    frev = list(reversed(fcoeffs))  # Otra forma de invertir una lista... frev = fcoeffs[::-1]
+    if frev[0] > 0:       # ¿El coeficiente principal es positivo?
+        currentSign = 1   # currentSign = 1 para que el signo actual sea +
+        fsgnPrint = '+ '
+    else:
+        currentSign = -1  # currentSign = -1 para el signo actual siendo -
+        fsgnPrint = '- '
+    fsgnChange = 0  # Realizar un seguimiento de los cambios de signo
+    frev.pop(0)  # Eliminar el coeficiente principal de la lista "frev".
+
+    # fsg PrintS se usará para el patrón de signos sin ceros (ceros suprimidos).
+    fsgnPrintNZ = fsgnPrint
+
+    while frev:   # Las listas no vacías tienen un valor booleano "Verdadero". Esto se repite hasta que frev está vacío.
+        if frev[0] > 0:  # Un coeficiente positivo
+            if currentSign == -1:  # El ultimo signo fue negativo. Tenemos un cambio de signo.
+                currentSign = 1
+                fsgnChange = fsgnChange + 1
+            fsgnPrint = fsgnPrint + '+ '
+            fsgnPrintNZ = fsgnPrintNZ + '+ ' 
+
+        if frev[0] < 0:  # Un coeficiente negativo
+            if currentSign == 1:  # El ultimo signo fue negativo. Tenemos un cambio de signo.
+                currentSign = -1
+                fsgnChange = fsgnChange + 1
+            fsgnPrint = fsgnPrint + '- '
+            fsgnPrintNZ = fsgnPrintNZ + '- ' 
+
+        if frev[0] == 0: # Un coeficiente cero
+            fsgnPrint = fsgnPrint + '0 '
+       
+        frev.pop(0) # Terminado de tratar con este coeficiente. Eliminarlo de la lista.
+
+    pretty_print(html("Signos de coeficientes: $\\quad "+fsgnPrint+" \\quad$ Suprimiendo ceros: $\\quad "+fsgnPrintNZ+" \\quad$ Número de cambios de signo: $%d$"%(fsgnChange)))
+
+    return fsgnChange
+       
+def lagrangeB(f):
+    fcoeffs = f.coefficients(sparse=False)    
+    frev = list(reversed(fcoeffs)) 
+    B = 0
+    while frev:   
+        if frev[0] < 0 and abs(frev[0])>B:  
+            B =  abs(frev[0])      
+        frev.pop(0) 
+    return B
+
+def lagrangeK(f):
+    fcoeffs = f.coefficients(sparse=False)    
+    frev = list(reversed(fcoeffs)) 
+    while frev:   
+        if frev[0] < 0:  
+            return frev[0]   
+        frev.pop(0) 
+    return null
+            
+def lagrangeA(f):
+    fcoeffs = f.coefficients(sparse=False)    
+    frev = list(reversed(fcoeffs)) 
+    if frev: 
+        return frev[0]
+    return null
+
+def lagrangeUpperBond(f,B,K,a):
+    return  (1 + (B/a)**(1/K))
+    
+    
+def redo(R):
+    dec = R - int(R)
+    rst = int(R) if dec < 0.5 else int(R)+1
+    return rst
+
+
+# En la parte superior, se coloca un cuadro de entrada para nuestra entrada polinomial f.
+#
+# "UpdateButton" hacer que aparezca un botón en nuestra celda. Sage esperará hasta este botón
+# se presiona antes de volver a calcular nuestra respuesta.
+#
+# "showPlot" y "plotDomain" permiten al usuario activar un gráfico de f y plot
+# según el dominio ingresado en el cuadro de entrada. El valor predeterminado es -2 <= x <= 1.
+@interact(layout=dict(top=[['fIn','ub']],bottom=[['showPlot'],['plotDomain']]))
+def _(fIn=input_box('x^6+2x^5-x^3+x',width=40,label='$f(x) = $',type=str),
+      plotDomain=input_box((-2,1),width=20,label='$\\mathrm{Dominio\\ gráfica:}$'),
+      showPlot=checkbox(default=False,label='$\\mathrm{Mostrar\\ Gráfica?}$'),
+      ub=UpdateButton('Actualizar')):
+
+    # Asumiremos que f es un polinomio racional. "f = P(f)" convierte f de una cadena a un polinomio.
+    P.<x> = PolynomialRing(QQ)
+
+    # f se nos pasa como cadenas. Estas líneas de código convierten f en
+    # un elemento de nuestro anillo polinomial. Si esto falla, damos un mensaje de error.
+    try:   
+        f = P(cleanInput(fIn))
+    except:
+        pretty_print(html("$f(x)$ no es un polinomio válido. Por favor, asegúrese de que tenga coeficientes racionales."))
+        return
+
+    if f == 0:  # La regla de Descartes no es para el polinomio cero.
+        pretty_print(html("Todos los números reales son raices de $f(x)=0$."))
+        return
+
+    pretty_print(html("Primero, examinamos los coeficientes de $\\ f(x)=%s\\ :\\quad$"%str(latex(f))+str(list(reversed(f.coefficients(sparse=False))))+"<br><br>" ))
+    
+    sp = coeffSignChange(f)
+    if sp == 0:
+        pretty_print(html("<br>$f(x)$ no tiene raices reales positivas."))
+    elif sp == 1:
+        pretty_print(html("<br>$f(x)$ tiene $1$ raíz real positiva."))
+    elif sp == 2:
+        pretty_print(html("<br>$f(x)$ tiene raices reales positivas de $2$ o $0$."))
+    elif sp == 3:
+        pretty_print(html("<br>$f(x)$ tiene raices reales positivas de $3$ o $1$."))
+    else:
+        possibleNumbers = ''
+        possibleList = range(0,sp+1)[::-2]  
+        while len(possibleList) > 1:
+            possibleNumbers = possibleNumbers + "$%d$, "%(possibleList[0])
+            possibleList.pop(0)
+        possibleNumbers = possibleNumbers + "or $%d$"%(possibleList[0])
+        pretty_print(html("<br>$f(x)$ posee "+possibleNumbers+" raices reales positivas."))
+
+    pretty_print(html("<br>"))
+
+    pretty_print(html("A continuación, examinamos los coeficientes de $\\ f(-x)=%s\\ :\\quad$"%str(latex(f(-x)))+str(list(reversed(f(-x).coefficients(sparse=False))))+"<br><br>" ))
+
+    sn = coeffSignChange(f(-x))
+    if sn == 0:
+        pretty_print(html("<br>$f(x)$ no tiene raices reales negativas."))
+    elif sn == 1:
+        pretty_print(html("<br>$f(x)$ tiene $1$ raíz real negativa."))
+    elif sn == 2:
+        pretty_print(html("<br>$f(x)$ tiene raices reales negativas de $2$ o $0$."))
+    elif sn == 3:
+        pretty_print(html("<br>$f(x)$ tiene raices reales negativas de $3$ o $1$."))
+    else:
+        possibleNumbers = ''
+        possibleList = range(0,sn+1)[::-2]  
+        while len(possibleList) > 1:
+            possibleNumbers = possibleNumbers + "$%d$, "%(possibleList[0])
+            possibleList.pop(0)
+        possibleNumbers = possibleNumbers + "or $%d$"%(possibleList[0])
+        pretty_print(html("<br>$f(x)$ posee "+possibleNumbers+" raíces reales negativas."))
+
+    pretty_print(html("<br>"))
+
+    # Hay sp, sp-2, ... posibles raices positivas y sn, sn-2, ... posibles raices negativas.
+    # Este comando "suma" las posibilidades de números de raices positivas y negativas.
+    possibleList = sorted(set([x+y for x in range(0,sp+1)[::-2] for y in range(0,sn+1)[::-2]]), reverse=True)   
+
+    if f(0) == 0:  # Zero es raiz.
+        possibleList = [x+1 for x in possibleList]  # Add in the zero root to the list of possibilities.
+        pretty_print(html("Nótese que $f(0)=0$, entonces $x=0$ es una raíz.<br><br>"))
+        sz = 1
+    else:
+        sz = 0
+
+    if sn+sz+sp == 0:
+        pretty_print(html("<br>$f(x)$ no tiene raices reales."))
+    elif sn+sz+sp == 1:
+        pretty_print(html("<br>$f(x)$ tiene $1$ raíz real."))
+    elif len(possibleList) == 1:
+        pretty_print(html("<br>$f(x)$ tiene $%d$ raices reales."%(possibleList[0])))
+    elif len(possibleList) == 2:
+        pretty_print(html("<br>$f(x)$ tiene $%d$ o $%d$ raices reales."%(possibleList[0],possibleList[1])))
+    else:
+        possibleNumbers = ''
+        while len(possibleList) > 1:
+            possibleNumbers = possibleNumbers + "$%d$, "%(possibleList[0])
+            possibleList.pop(0)
+        possibleNumbers = possibleNumbers + "or $%d$"%(possibleList[0])
+        pretty_print(html("<br>$f(x)$ posee "+possibleNumbers+" raices reales."))
+
+
+    B = str(lagrangeB(f))
+    K = str(lagrangeK(f))
+    a = str(lagrangeA(f))
+    R = str(lagrangeUpperBond(f,int(B),int(K),int(a)))
+    Rr = str(redo(float(R)))
+    pretty_print(html("<h3> Acotar raíces positivas  </h3>"))
+    pretty_print(html("<br>Por la regla de Lagrange: <b>$B$&nbsp=&nbsp</b>"+B+"<b>&nbsp$K$&nbsp=&nbsp</b>"+K+"&nbsp$a_0 = $"+a+"⟹&nbsp$&nbsp$&nbsp$R = 1 + (B / a_0)^{1/k} = $"+R + "≈"+Rr))    
+    pretty_print(html("Entonces, todas las raíces positivas están comprendidas en el intervalo [0 ,"+Rr+"]"))
+    
+
+    B = str(lagrangeB(f(-x)))
+    K = str(lagrangeK(f))
+    a = str(lagrangeA(f))
+    R = str(lagrangeUpperBond(f,int(B),int(K),int(a)))
+    
+    Rr = str(redo(float(R)))
+
+    pretty_print(html("<h3> Acotar raíces negativas  </h3>"))
+    pretty_print(html("<br>Por la regla de Lagrange: <b>$B$&nbsp=&nbsp</b>"+B+"<b>&nbsp$K$&nbsp=&nbsp</b>"+K+"&nbsp$a_0 = $"+a+"⟹&nbsp$&nbsp$&nbsp$R = 1 + (B / a_0)^{1/k} = $"+R + "≈"+Rr))    
+    pretty_print(html("Entonces, todas las raíces negativas están comprendidas en el intervalo [-"+Rr+",0]"))
+       
+
+    # Si la opción "¿Mostrar gráfica?" está marcada, mostrar un gráfico rojo de nuestro polinomio f(x) en el
+    # dominio determinado por plotDomain. Agregamos algunas comprobaciones de errores buscando dominios no válidos.
+    if showPlot:
+        try:
+           pretty_print(html("<br>"))          
+ 
+           ap = float(plotDomain[0])
+           bp = float(plotDomain[1])
+         
+           if ap<bp:
+              var('u') 
+              show(plot(f(u),(u,ap,bp),color='blue'),figsize=3.5)   #,thickness=3
+           else:
+              pretty_print(html('<br><br><b>Dominio inválido.</b> Por favor intente algo como "(-2,1)".'))
+        except:
+           pretty_print(html('<br><br><b>Dominio inválido</b> Por favor intente algo como  "(-2,1)".'))
+</script>
+</div>
+
+</body>
+</html>
